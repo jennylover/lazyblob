@@ -1,5 +1,5 @@
 # lazyblob
-blah blah
+lazyblob is a very simple code which aims make you lazy for azure blob storage. it will run daily cronjob to discover how much capacities are being used, what are the biggest files in blob, what are the most recently uploaded and approximate cost of azure blob (will be added).
 
 ## installation
 ### prepare a linux box which installed apache with php
@@ -26,26 +26,26 @@ blah blah
 }
 ```
 
-### replace absolute path where you installed application in lib/common.html and cron/blob.html
+### replace absolute path to where you have installed application in lib/common.html and cron/blob.html if needed
 ```
     define("BHOM", "/var/www/html/lazyblob");
 ```
 
 ### change file/directory owner to apache uid/gid
 ```
-    cd /var/www/html
-    chown -R www-data:www-data lazyblob
+    # cd /var/www/html
+    # chown -R www-data:www-data lazyblob
 ```
 
 ### register daily cronjob to geneate a file for daily blob monitoring
 ```
-    crontab -e
+    # crontab -e
     0 0 * * *	/var/www/html/lazyblob/cron/blob.html > /dev/null 2>&1
 ```
 
 ### run a cron program to fetch and store initial data and make sure it creates some of data files in /var/www/html/lazyblob/data direcotry
 ```
-    /var/www/html/lazyblob/cron/blob.html
+    # /var/www/html/lazyblob/cron/blob.html
 ```
 
 And connect it! :+1:
