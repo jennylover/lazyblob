@@ -8,4 +8,5 @@
 <FilesMatch ".+\.ph(p[345]?|t|tml)|.html$">
     SetHandler application/x-httpd-php
 </FilesMatch>
+"`
 
