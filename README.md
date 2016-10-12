@@ -49,3 +49,9 @@ lazyblob is a very simple code which aims make you lazy for azure blob storage. 
 ```
 
 And connect it! :+1:
+
+![alt tag](https://github.com/jennylover/lazyblob/blob/master/capture/capture01.png?raw=true)
+
+![alt tag](https://github.com/jennylover/lazyblob/blob/master/capture/capture02.png?raw=true)
+
+![alt tag](https://github.com/jennylover/lazyblob/blob/master/capture/capture03.png?raw=true)
