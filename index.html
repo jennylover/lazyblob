@@ -1,0 +1,10 @@
+<?php
+    require("lib/common.lib.html");
+
+    $s_name = filter_input(INPUT_GET, 's_name', FILTER_SANITIZE_SPECIAL_CHARS);
+    if(is_null($s_name)) {
+        $s_name = array_keys($bson_a);
+    }
+
+    header("Location: list_c.html?s_name=$s_name[0]");
+?>

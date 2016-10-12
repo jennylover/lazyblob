@@ -1,0 +1,276 @@
+<?php
+    require("lib/common.lib.html");
+    require("include/header.html");
+
+    use WindowsAzure\Common\ServicesBuilder;
+    use WindowsAzure\Common\ServiceException;
+    use WindowsAzure\Blob\Models\ListBlobsOptions;
+
+    $s_name = filter_input(INPUT_GET, 's_name', FILTER_SANITIZE_SPECIAL_CHARS);
+    if(is_null($s_name)) {
+
+    }
+
+    $c_name = filter_input(INPUT_GET, 'c_name', FILTER_SANITIZE_SPECIAL_CHARS);
+    if(is_null($c_name)) {
+
+    }
+    $p_name = filter_input(INPUT_GET, 'p_name', FILTER_SANITIZE_SPECIAL_CHARS);
+    if(is_null($p_name)) {
+        $p_name = "";
+    }
+
+
+    $connectionString = "DefaultEndpointsProtocol=https;AccountName=".$s_name.";AccountKey=".$bson_a[$s_name]["keys"]."";
+    $blobClient = ServicesBuilder::getInstance()->createBlobService($connectionString);
+?>
+
+<script type="text/javascript">
+    $(function() {
+        <?php
+            if(file_exists(BHOM."/data/".$s_name."_day")) {
+                $handle = popen("tail -n 7 ".BHOM."/data/".$s_name."/".$c_name, "r");
+                if($handle) {
+                    $v_d1 = $v_d2 = "";
+                    while (($buffer = fgets($handle, 1024)) != false) {
+                        $v_date = explode(":", $buffer);
+                        //$v_temp = explode("|", trim($v_date[1]));
+                        $v_data = explode("/", $v_date[1]);
+
+                        $v_d1 = $v_d1 . sprintf("[%s000, %0.0f],", trim($v_date[0]), substr(sizeFormatter(trim($v_data[1])), 0, -3));
+                        $v_d2 = $v_d2 . sprintf("[%s000, %0.0f],", trim($v_date[0]), trim($v_data[0]));
+                    }
+                    $v_d1 = substr($v_d1, 0, -1);
+                    $v_d2 = substr($v_d2, 0, -1);
+                }
+                pclose($handle);
+
+                printf("var d1 = [%s];\n", $v_d1);
+                printf("var d2 = [%s];\n", $v_d2);
+            } else {
+                printf("var d1 = [];\n");
+                printf("var d2 = [];\n");
+            }
+        ?>
+
+        var options = {
+            xaxis: {
+                mode: "time",
+                timezone: "browser",
+                timeformat: "%b %d",
+                //axisLabel: "GB",
+                axisLabelUseCanvas: true,
+                axisLabelFontSizePixels: 11,
+                axisLabelFontFamily: 'Verdana, Arial',
+                axisLabelPadding: 10,
+                //tickLength: 0,
+                //ticks: ticks
+            },
+            yaxis: {
+                min: 0,
+                //axisLabel: "GB",
+                axisLabelUseCanvas: true,
+                axisLabelFontSizePixels: 11,
+                axisLabelFontFamily: 'Verdana, Arial',
+                axisLabelPadding: 3,
+                //tickLength: 0,
+                reserveSpace: true,
+                tickFormatter: function (v, axis) {
+                    return v.toFixed(0);
+                }
+            },
+            legend: {
+                noColumns: 0,
+                //labelBoxBorderColor: "#000000",
+                position: "se"
+            },
+            grid: {
+                hoverable: true,
+                //clickable: true,
+                borderWidth: 0,
+                backgroundColor: { colors: ["#ffffff", "#EDF5FF"] }
+            },
+            series: {
+                lines: {
+                    show: true,
+                },
+                points: {
+                    show: true,
+                    radius: 3
+                }
+            }
+        };
+
+        var plot = $.plot("#sizeholder", [{
+            data: d1,
+            color: "#3366ff",
+            label: "Capacity",
+            points: {
+                symbol: "triangle"
+            }
+        }], options);
+        var plot = $.plot("#fileholder", [{
+            data: d2,
+            color: "#ff6633",
+            label: "Object Count",
+            points: {
+                symbol: "circle"
+            }
+        }], options);
+    });
+</script>
+
+<div class="top">
+    <div class="panel-heading">
+        <h1>Storage : <?php echo($s_name." / ".$c_name); ?></h1>
+        <div class="subnav" data-pjax>
+            <a href="list_c_b.html?s_name=<?php echo(urlencode($s_name)); ?>" class="btn btn-primary float-right" role="button" data-hotkey="e">Explorer</a>
+            <a href="list_c.html?s_name=<?php echo(urlencode($s_name)); ?>" class="btn btn-primary float-right" role="button" data-hotkey="o">Overview</a>
+        </div>
+    </div>
+</div>
+
+<div class="commit-tease js-details-container">
+    <span class="float-right">
+        latest update was
+        <?php
+            if(file_exists(BHOM."/data/".$s_name."_sum")) {
+                $m_time = date("Y-m-dTH:i:s", filemtime(BHOM."/data/".$s_name."_sum"));
+            }
+        ?>
+        <span itemprop="dateModified"><relative-time datetime="<?php echo($m_time); ?>"><?php echo($m_time); ?></relative-time></span>
+    </span>
+
+    <span class="commit-author-section">
+        <img src="image/azure-container.png">
+        <?php
+            if(file_exists(BHOM."/data/".$s_name."_sum")) {
+                $pipe = popen("grep ".$s_name."::".$c_name."::TOTAL ".BHOM."/data/".$s_name."_sum | awk -F'::' '{print $4}'", "r");
+                $t_size = trim(fgets($pipe, 1024));
+                pclose($pipe);
+                printf("<span style=\"font-family:calibri; color:#0431b4; font-weight:bold; font-size:12pt\">%s</span>\n", sizeFormatter($t_size));
+            } else {
+                printf("<span style=\"font-family:calibri; color:#0431b4; font-weight:bold; font-size:12pt\">file not found</span>\n");
+            }
+        ?>
+    </span>
+
+    <table class="files js-navigation-container js-active-navigation-container" data-pjax>
+        <tbody>
+        <tr>
+            <td>
+                <div style="width:100%;height:200px;text-align:center;margin:1px">
+                    <div id="sizeholder" style="width:100%;height:100%"></div>
+                </div>
+            </td>
+            <td>
+                <div style="width:100%;height:200px;text-align:center;margin:1px">
+                    <div id="fileholder" style="width:100%;height:100%"></div>
+                </div>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<hr>
+
+<div class="commit-tease js-details-container">
+    <span class="commit-author-section">
+        <?php
+            printf("<img src=\"image/azure-storage.png\"> [<a href=\"list_c_b.html?s_name=%s\" class=\"user-mention\" rel=\"contributor\"><span style=\"font-family:calibri; color:#6699ff; font-weight:bold; font-size:14pt\">%s</span></a>]\n", urlencode($s_name), $s_name);
+            printf("<img src=\"image/azure-container.png\"> <a href=\"list_b.html?s_name=%s&c_name=%s\" class=\"user-mention\" rel=\"contributor\"><span style=\"font-family:calibri; color:#ff9966; font-weight:bold; font-size:14pt\">%s</span></a>\n", urlencode($s_name), urlencode($c_name), $c_name);
+            if(!empty($p_name)) {
+                $s_temp = "";
+                $a_temp = explode("/", $p_name);
+                for($i=0; $i<sizeof($a_temp); $i++) {
+                    if(!empty($a_temp[$i])) {
+                        $s_temp = $s_temp == "" ? $s_temp = $a_temp[$i] . "/" : $s_temp = $s_temp . $a_temp[$i] . "/";
+                        printf(" / <a href=\"list_b.html?s_name=%s&c_name=%s&p_name=%s\" class=\"user-mention\" rel=\"contributor\"><span style=\"font-family:calibri; color:#9966ff; font-weight:bold; font-size:14pt\">%s</span></a>\n", urlencode($s_name), urlencode($c_name), urlencode($s_temp), $a_temp[$i]);
+                    }
+                }
+            }
+        ?>
+    </span>
+</div>
+
+<div class="file-wrap">
+    <table class="files js-navigation-container js-active-navigation-container" data-pjax>
+        <tbody>
+
+        <?php
+            //$p_name = $p_name == "" ? $p_name = "" : $p_name = $p_name."/";
+            //$p_name = $p_name == "" ? $p_name = "" : $p_name = $p_name;
+            $blobo = new ListBlobsOptions();
+            $blobo->setPrefix($p_name);
+            $blobo->setDelimiter("/");
+
+            $b_blobs = $blobClient->listBlobs($c_name, $blobo);
+            $blobp = $b_blobs->getBlobPrefixes();
+            foreach($blobp as $blob) {
+                printf("<tr class=\"js-navigation-item\">\n");
+
+                printf("<td class=\"icon\">\n");
+                printf("<svg aria-hidden=\"true\" class=\"octicon octicon-file-directory\" height=\"16\" version=\"1.1\" viewBox=\"0 0 14 16\" width=\"14\"><path d=\"M13 4H7V3c0-.66-.31-1-1-1H1c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1V5c0-.55-.45-1-1-1zM6 4H1V3h5v1z\"></path></svg>\n");
+                printf("<img alt=\"\" class=\"spinner\" height=\"16\" src=\"https://assets-cdn.github.com/images/spinners/octocat-spinner-32.gif\" width=\"16\">\n");
+                printf("</td>\n");
+
+                printf("<td class=\"content\">\n");
+                //printf("<span class=\"css-truncate css-truncate-target\"><a href=\"list_b.html?s_name=%s&c_name=%s&p_name=%s\" class=\"js-navigation-open\">%s</a></span>\n", urlencode($s_name), urlencode($c_name), urlencode($blob->getName()), substr($blob->getName(), 0, -1));
+                printf("<span class=\"css-truncate css-truncate-target\"><a href=\"list_b.html?s_name=%s&c_name=%s&p_name=%s\" class=\"js-navigation-open\">%s</a></span>\n", urlencode($s_name), urlencode($c_name), urlencode($blob->getName()), str_replace($p_name, "", substr($blob->getName(), 0, -1)));
+                printf("</td>\n");
+
+                //printf("<td class=\"message\">\n");
+                //printf("<span class=\"css-truncate css-truncate-target\">&nbsp;</span>\n");
+                //printf("</td>\n");
+
+                printf("<td class=\"age\">\n");
+                printf("<span class=\"float-right\">&nbsp;</span>\n");
+                printf("</td>\n");
+
+                printf("<td class=\"message\">\n");
+                printf("<span class=\"css-truncate css-truncate-target\">&nbsp;</span>\n");
+                printf("</td>\n");
+
+                printf("</tr>\n");
+            }
+
+            $blobs = $b_blobs->getBlobs();
+            foreach($blobs as $blob)
+            {
+                $blob_info = $blob->getProperties();
+                $blob_date = $blob_info->getlastModified();
+                printf("<tr class=\"js-navigation-item\">\n");
+
+                printf("<td class=\"icon\">\n");
+                printf("<svg aria-hidden=\"true\" class=\"octicon octicon-file-text\" height=\"16\" version=\"1.1\" viewBox=\"0 0 12 16\" width=\"12\"><path d=\"M6 5H2V4h4v1zM2 8h7V7H2v1zm0 2h7V9H2v1zm0 2h7v-1H2v1zm10-7.5V14c0 .55-.45 1-1 1H1c-.55 0-1-.45-1-1V2c0-.55.45-1 1-1h7.5L12 4.5zM11 5L8 2H1v12h10V5z\"></path></svg>\n");
+                printf("<img alt=\"\" class=\"spinner\" height=\"16\" src=\"https://assets-cdn.github.com/images/spinners/octocat-spinner-32.gif\" width=\"16\">\n");
+                printf("</td>\n");
+
+                printf("<td class=\"content\">\n");
+                printf("<span class=\"css-truncate css-truncate-target\"><a href=\"down_b.html?s_name=%s&c_name=%s&b_name=%s\" class=\"js-navigation-open\">%s</a></span>\n", urlencode($s_name), urlencode($c_name), urlencode($blob->getName()), str_replace($p_name, "", $blob->getName()));
+                printf("</td>\n");
+
+                //printf("<td class=\"message\">\n");
+                //printf("<span class=\"css-truncate css-truncate-target\">%s</span>\n", $blob_date->format('Y-m-dTH:i:s'));
+                //printf("</td>\n");
+
+                printf("<td class=\"ago\">\n");
+                printf("<span class=\"css-truncate css-truncate-target\"><time-ago datetime=\"%s\">%s</time-ago></span>\n", $blob_date->format('Y-m-dTH:i:s'), $blob_date->format('Y-m-dTH:i:s'));
+                printf("</td>\n");
+
+                printf("<td class=\"message\">\n");
+                printf("<span class=\"float-right\">%s</span>\n", sizeFormatter($blob_info->getcontentLength()));
+                printf("</td>\n");
+
+                printf("</tr>\n");
+            }
+        ?>
+
+        </tbody>
+    </table>
+</div>
+
+<?
+    require("include/footer.html");
+?>

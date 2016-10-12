@@ -1,0 +1,37 @@
+<?
+    require("lib/common.lib.html");
+    //require("include/header.html");
+
+    use WindowsAzure\Common\ServicesBuilder;
+    use WindowsAzure\Common\ServiceException;
+    use WindowsAzure\Blob\Models\ListBlobsOptions;
+
+    $s_name = filter_input(INPUT_GET, 's_name', FILTER_SANITIZE_SPECIAL_CHARS);
+    if(is_null($s_name)) {
+
+    }
+    $c_name = filter_input(INPUT_GET, 'c_name', FILTER_SANITIZE_SPECIAL_CHARS);
+    if(is_null($c_name)) {
+
+    }
+    $b_name = filter_input(INPUT_GET, 'b_name', FILTER_SANITIZE_SPECIAL_CHARS);
+    if(is_null($b_name)) {
+
+    }
+
+    $connectionString = "DefaultEndpointsProtocol=https;AccountName=".$s_name.";AccountKey=".$bson_a[$s_name]["keys"]."";
+    $blobClient = ServicesBuilder::getInstance()->createBlobService($connectionString);
+
+    $blob = $blobClient->getBlob($c_name, $b_name);
+    $blob_info = $blob->getProperties();
+
+    $f_name = explode("/", $b_name);
+
+    header("Pragma: public");
+    header("Content-disposition: attachment; filename=".$f_name[count($f_name)-1]);
+    header("Content-type: ".$blob_info->getcontentType());
+    header("Content-length: ".$blob_info->getcontentLength());
+    header("Content-Transfer-Encoding: binary");
+
+    fpassthru($blob->getContentStream());
+?>

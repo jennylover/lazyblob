@@ -1,0 +1,84 @@
+#!/usr/bin/php
+
+<?php
+    define("BHOM", "/var/www/html/blob");
+
+    require_once(BHOM."/vendor/autoload.php");
+
+    use WindowsAzure\Common\ServicesBuilder;
+    use WindowsAzure\Common\ServiceException;
+
+
+    $bson = file_get_contents(BHOM."/lib/blob.json");
+    $bson_a = json_decode($bson, true);
+
+    foreach($bson_a as $blob_k => $blob_v) {
+        //echo $blob_k."\n";
+        //echo $blob_v['keys']."\n";
+
+        $s_name = $blob_k;
+        $connectionString = "DefaultEndpointsProtocol=https;AccountName=".$s_name.";AccountKey=".$blob_v["keys"]."";
+
+        $blobClient = ServicesBuilder::getInstance()->createBlobService($connectionString);
+
+        $b_conts = $blobClient->listContainers();
+        $conts = $b_conts->getContainers();
+
+        if(!file_exists(BHOM."/data/".$s_name)) {
+            mkdir(BHOM."/data/".$s_name, 0744);
+        }
+
+        $t_size = 0;
+        $t_file = 0;
+        $c_info = "";
+        $file0 = fopen(BHOM."/data/".$s_name."_day", "a+");
+        $file1 = fopen(BHOM."/data/".$s_name."_all", "w");
+        $file2 = fopen(BHOM."/data/".$s_name."_sum", "w");
+        foreach($conts as $cont) 
+        { 
+            $c_name = $cont->getName();
+
+            $b_blobs = $blobClient->listBlobs($c_name);
+            $blobs = $b_blobs->getBlobs();
+
+            $c_size = 0;
+            $f_temp = array();
+            foreach($blobs as $blob) {
+                $blob_info = $blob->getProperties();
+                $blob_date = $blob_info->getlastModified();
+                if(substr($blob->getName(), -1) == "/") {
+
+                } else {
+                    $b_objt = explode("/", $blob->getName());
+                    array_pop($b_objt);
+
+                    $t_size += $blob_info->getcontentLength();
+                    $c_size += $blob_info->getcontentLength();
+
+                    if(array_key_exists(implode("/", $b_objt), $f_temp)) {
+                        $f_temp[(string)implode("/", $b_objt)] += $blob_info->getcontentLength();
+                    } else {
+                        $f_temp[(string)implode("/", $b_objt)] = $blob_info->getcontentLength();
+                    }
+                }
+                fprintf($file1, "%s::%s::%s::%s::%s\n", $s_name, $c_name, $blob->getName(), $blob_date->getTimestamp(), $blob_info->getcontentLength());
+
+            }
+            fprintf($file2, "%s::%s::TOTAL::%s\n", $s_name, $c_name, $c_size);
+            while(list($f_key, $f_val) = each($f_temp)) {
+                fprintf($file2, "%s::%s::%s::%s\n", $s_name, $c_name, $f_key, $f_val);
+            }
+
+            $t_file += sizeof($blobs);
+
+            $file4 = fopen(BHOM."/data/".$s_name."/$c_name", "a+");
+            fprintf($file4, "%s : %s/%s\n", mktime(0, 0, 0, date("m"), date("d"), date("Y")), sizeof($blobs), $c_size);
+            fclose($file4);
+        }
+        fprintf($file2, "%s::TOTAL::%s\n", $s_name, $t_size);
+        fprintf($file0, "%s : %s/%s/%s\n", mktime(0, 0, 0, date("m"), date("d"), date("Y")), sizeof($conts), $t_file, $t_size);
+        fclose($file2);
+        fclose($file1);
+        fclose($file0);
+    }
+?>

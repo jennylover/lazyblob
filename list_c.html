@@ -1,0 +1,390 @@
+<?php
+    require("lib/common.lib.html");
+    require("include/header.html");
+
+    use WindowsAzure\Common\ServicesBuilder;
+    use WindowsAzure\Common\ServiceException;
+    use WindowsAzure\Blob\Models\ListBlobsOptions;
+
+    $s_name = filter_input(INPUT_GET, 's_name', FILTER_SANITIZE_SPECIAL_CHARS);
+    if(empty($s_name)) {
+        header("Location: null.html?msg=ERR1\n");
+    } elseif(!array_key_exists($s_name, $bson_a)) {
+        header("Location: null.html?msg=ERR2\n");
+    }
+
+    $connectionString = "DefaultEndpointsProtocol=https;AccountName=".$s_name.";AccountKey=".$bson_a[$s_name]["keys"]."";
+    $blobClient = ServicesBuilder::getInstance()->createBlobService($connectionString);
+?>
+
+<script type="text/javascript">
+    $(function() {
+        <?php
+            if(file_exists(BHOM."/data/".$s_name."_day")) {
+                $handle = popen("tail -n 7 ".BHOM."/data/".$s_name."_day", "r");
+                if($handle) {
+                    $v_d1 = $v_d2 = $v_d3 = "";
+                    while (($buffer = fgets($handle, 1024)) != false) {
+                        $v_date = explode(":", $buffer);
+                        //$v_temp = explode("|", trim($v_date[1]));
+                        $v_data = explode("/", $v_date[1]);
+
+                        $v_d1 = $v_d1 . sprintf("[%s000, %0.0f],", trim($v_date[0]), substr(sizeFormatter(trim($v_data[2])), 0, -3));
+                        $v_d2 = $v_d2 . sprintf("[%s000, %0.0f],", trim($v_date[0]), trim($v_data[0]));
+                        $v_d3 = $v_d3 . sprintf("[%s000, %0.0f],", trim($v_date[0]), trim($v_data[1]));
+                    }
+                    $v_d1 = substr($v_d1, 0, -1);
+                    $v_d2 = substr($v_d2, 0, -1);
+                    $v_d3 = substr($v_d3, 0, -1);
+                }
+                pclose($handle);
+
+                printf("var d1 = [%s];\n", $v_d1);
+                printf("var d2 = [%s];\n", $v_d2);
+                printf("var d3 = [%s];\n", $v_d3);
+            } else {
+                printf("var d1 = [];\n");
+                printf("var d2 = [];\n");
+                printf("var d3 = [];\n");
+            }
+
+            if(file_exists(BHOM."/data/".$s_name."_sum")) {
+                $handle = popen("cat ".BHOM."/data/".$s_name."_sum | grep TOTAL | awk -F'::' '{print $2 \"|\" $4}' | sort -t '|' -n -r -k2 | grep -v '^TOTAL' | grep -v '^vhds'", "r");
+                if($handle) {
+                    $v_d4 = "";
+                    while (($buffer = fgets($handle, 1024)) != false) {
+                        $v_data = explode("|", $buffer);
+                        $v_d4 = $v_d4 . sprintf("{ label: \"%s\", data: \"%s\" },", trim($v_data[0]), trim($v_data[1]));
+                    }
+                    $v_d4 = substr($v_d4, 0, -1);
+                }
+                pclose($handle);
+
+                printf("var d4 = [%s];\n", $v_d4);
+            } else {
+                printf("var d4 = [];\n");
+            }
+        ?>
+
+        var options = {
+            xaxis: {
+                mode: "time",
+                timezone: "browser",
+                timeformat: "%b %d",
+                //axisLabel: "GB",
+                axisLabelUseCanvas: true,
+                axisLabelFontSizePixels: 11,
+                axisLabelFontFamily: 'Verdana, Arial',
+                axisLabelPadding: 10,
+                //tickLength: 0,
+                //ticks: ticks
+            },
+            yaxis: {
+                min: 0,
+                //axisLabel: "GB",
+                axisLabelUseCanvas: true,
+                axisLabelFontSizePixels: 11,
+                axisLabelFontFamily: 'Verdana, Arial',
+                axisLabelPadding: 3,
+                //tickLength: 0,
+                reserveSpace: true,
+                tickFormatter: function (v, axis) {
+                    return v.toFixed(0);
+                }
+            },
+            legend: {
+                noColumns: 0,
+                //labelBoxBorderColor: "#000000",
+                position: "se"
+            },
+            grid: {
+                hoverable: true,
+                //clickable: true,
+                borderWidth: 0,
+                backgroundColor: { colors: ["#ffffff", "#EDF5FF"] }
+            },
+            series: {
+                lines: {
+                    show: true,
+                },
+                points: {
+                    show: true,
+                    radius: 3
+                }
+            }
+        };
+
+        var piecopt = {
+            series: {
+                pie: {
+                    show: true,                
+                    radius: 0.8,                
+                    //innerRadius: 0.5,
+                    label: {
+                        show:true,
+                        radius: 3/4,
+                        formatter: labelFormatter,
+                        threshold: 0.05,
+                        background: {
+                            opacity: 0.8,
+                            color: '#000'
+                        }
+                    }
+                }
+            },
+            grid: {
+                hoverable: true,
+                clickable: true
+            },
+            legend: {
+                show: false
+            }
+        };
+
+        var plot = $.plot("#sizeholder", [{
+            data: d1,
+            color: "#83ce16",
+            label: "Capacity",
+            points: {
+                symbol: "triangle"
+            }
+        }], options);
+        var plot = $.plot("#contholder", [{
+            data: d2,
+            color: "#ce8316",
+            label: "Container Count",
+            points: {
+                symbol: "square"
+            }
+        }], options);
+        var plot = $.plot("#fileholder", [{
+            data: d3,
+            color: "#ce1683",
+            label: "Object Count",
+            points: {
+                symbol: "circle"
+            }
+        }], options);
+        var plot = $.plot("#piecholder", d4, piecopt);
+        if(isNaN(plot.getData()[0])) {
+            var canvas = plot.getCanvas();
+            var ctx = canvas.getContext("2d");  //canvas context
+            var x = canvas.width / 3;
+            var y = canvas.height / 2;
+            ctx.font = '14pt Calibri';
+            ctx.textAlign = 'center';
+            ctx.fillText('file is not exist. make sure cron is working', x, y);
+        }
+
+
+        $("#piecholder").bind("plothover", function (event, pos, item) {
+            if (!item) {
+                return;
+            }
+
+            var percent = parseFloat(item.series.percent).toFixed(2);
+            //$("#hover").html("<span style='font-weight:bold; color:" + item.series.color + "'>" + item.series.label + " (" + percent + "%)</span>");
+            $("#piehover").html("<span style='font-size:10pt; color:#858585; font-weight:bold'>" + item.series.label + " (" + percent + "%)</span>");
+        });
+
+        $("#piecholder").bind("plotclick", function (event, pos, item) {
+            if (!item) {
+                return;
+            }
+
+            percent = parseFloat(item.series.percent).toFixed(2);
+            alert(""  + item.series.label + ": " + percent + "%");
+            //alert(item.series.label);
+        });
+
+        function labelFormatter(label, series) {
+            var cname;
+
+            if(label.length > 20)
+                cname = label.substring(0, 20) + "...";
+            else
+                cname = label;
+
+            return "<div style='font-size:9pt; text-align:center; padding:2px; color:white;'>" + cname + "<br/>" + Math.round(series.percent) + "%</div>";
+        }
+    });
+</script>
+
+<div class="top">
+    <div class="panel-heading">
+        <h1>Storage : <?php echo($s_name); ?></h1>
+        <div class="subnav" data-pjax>
+            <a href="list_c_b.html?s_name=<?php echo(urlencode($s_name)); ?>" class="btn btn-primary float-right" role="button" data-hotkey="c">Explorer</a>
+        </div>
+    </div>
+</div>
+
+<div class="commit-tease js-details-container">
+    <span class="float-right">
+        latest update was
+        <?php
+            if(file_exists(BHOM."/data/".$s_name."_sum")) {
+                $m_time = date("Y-m-dTH:i:s", filemtime(BHOM."/data/".$s_name."_sum"));
+            }
+        ?>
+        <span itemprop="dateModified"><relative-time datetime="<?php echo($m_time); ?>"><?php echo($m_time); ?></relative-time></span>
+    </span>
+
+    <span class="commit-author-section">
+        <img src="image/azure-storage.png">
+        <?php
+            if(file_exists(BHOM."/data/".$s_name."_sum")) {
+                $pipe = popen("tail -n 1 ".BHOM."/data/".$s_name."_sum | awk -F'::' '{print $3}'", "r");
+                $t_size = trim(fgets($pipe, 1024));
+                pclose($pipe);
+                printf("<span style=\"font-family:calibri; color:#0431b4; font-weight:bold; font-size:12pt\">%s</span>\n", sizeFormatter($t_size));
+            } else {
+                printf("<span style=\"font-family:calibri; color:#0431b4; font-weight:bold; font-size:12pt\">file not found</span>\n");
+            }
+        ?>
+    </span>
+
+    <table class="files js-navigation-container js-active-navigation-container" data-pjax>
+        <tbody>
+        <tr>
+            <td colspan="2">
+                <div style="width:100%;height:200px;text-align:center;margin:1px">
+                    <div id="sizeholder" style="width:100%;height:100%"></div>
+                </div>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <div style="width:100%;height:200px;text-align:center;margin:1px">
+                    <div id="contholder" style="width:100%;height:100%"></div>
+                </div>
+            </td>
+            <td>
+                <div style="width:100%;height:200px;text-align:center;margin:1px">
+                    <div id="fileholder" style="width:100%;height:100%"></div>
+                </div>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<hr>
+
+<div class="row">
+    <div class="col-md-6">
+        <h3><img src="image/azure-container.png"> Capacity by Container</h3>
+            <div style="width:100%;height:330px;text-align:center;margin:1px">
+                <div id="piecholder" style="width:100%;height:100%"></div>
+            </div>
+            <div id="piehover" style="font-family:calibri; color:#585858; font-weight:bold; font-size:10pt; text-align:right;"><span style="color:#b404ae">* vhds is not included</span></div>
+    </div>
+    <div class="col-md-6">
+        <h3><img src="image/azure-container.png"> Top 10 : Container Capacity</h3>
+        <div class="file-wrap">
+            <table class="files js-navigation-container js-active-navigation-container" data-pjax>
+                <tbody>
+                <?php
+                    $handle = popen("cat ".BHOM."/data/".$s_name."_sum | grep TOTAL | awk -F'::' '{print $2 \"|\" $4}' | sort -t '|' -n -r -k2 | egrep -v '^TOTAL|^vhds' | head -n 10", "r");
+                    while (($buffer = fgets($handle, 1024)) !== false) {
+                        $b_temp = explode("|", $buffer);
+                        printf("<tr class=\"js-navigation-item\">\n");
+
+                        printf("<td class=\"icon\">\n");
+                        printf("<svg aria-hidden=\"true\" class=\"octicon octicon-file-directory\" height=\"16\" version=\"1.1\" viewBox=\"0 0 14 16\" width=\"14\"><path d=\"M13 4H7V3c0-.66-.31-1-1-1H1c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1V5c0-.55-.45-1-1-1zM6 4H1V3h5v1z\"></path></svg>\n");
+                        printf("<img alt=\"\" class=\"spinner\" height=\"16\" src=\"https://assets-cdn.github.com/images/spinners/octocat-spinner-32.gif\" width=\"16\">\n");
+                        printf("</td>\n");
+
+                        printf("<td class=\"content\">\n");
+                        printf("<span class=\"css-truncate css-truncate-target\"><a href=\"list_b.html?s_name=%s&c_name=%s\">%s</a></span>\n", urlencode($s_name), urlencode($b_temp[0]), $b_temp[0]);
+                        printf("</td>\n");
+
+                        printf("<td class=\"message\">\n");
+                        printf("<span class=\"float-right\">%s</span>\n", sizeFormatter($b_temp[1]));
+                        printf("</td>\n");
+
+                        printf("</tr>\n");
+                    }
+                    pclose($handle);
+                ?>
+                </tbody>
+            </table>
+        </div>
+        <div style="font-family:calibri; color:#585858; font-weight:bold; font-size:10pt; text-align:right;"><span style="color:#b404ae">* vhds is not included</span></div>
+    </div>
+</div>
+
+<hr>
+
+<div class="row">
+    <div class="col-md-6">
+        <h3><img src="image/azure-container.png"> Top 10 : Recent Object</h3>
+        <div class="file-wrap">
+            <table class="files js-navigation-container js-active-navigation-container" data-pjax>
+                <tbody>
+                <?php
+                    $handle = popen("cat ".BHOM."/data/".$s_name."_all | awk -F'::' '{print $2 \"|\" $3 \"|\" $4 \"|\" $5}' | sort -t '|' -n -r -k3 | grep -v '^vhds' | head -n 10", "r");
+                    while (($buffer = fgets($handle, 1024)) !== false) {
+                        $b_temp = explode("|", $buffer);
+                        printf("<tr class=\"js-navigation-item\">\n");
+
+                        printf("<td class=\"icon\">\n");
+                        printf("<svg aria-hidden=\"true\" class=\"octicon octicon-file-text\" height=\"16\" version=\"1.1\" viewBox=\"0 0 12 16\" width=\"12\"><path d=\"M6 5H2V4h4v1zM2 8h7V7H2v1zm0 2h7V9H2v1zm0 2h7v-1H2v1zm10-7.5V14c0 .55-.45 1-1 1H1c-.55 0-1-.45-1-1V2c0-.55.45-1 1-1h7.5L12 4.5zM11 5L8 2H1v12h10V5z\"></path></svg>\n");
+                        printf("<img alt=\"\" class=\"spinner\" height=\"16\" src=\"https://assets-cdn.github.com/images/spinners/octocat-spinner-32.gif\" width=\"16\">\n");
+                        printf("</td>\n");
+
+                        printf("<td class=\"content\">\n");
+                        printf("<span class=\"css-truncate css-truncate-target\">%s/%s</span>\n", $b_temp[0], $b_temp[1]);
+                        printf("</td>\n");
+
+                        printf("<td class=\"ago\">\n");
+                        printf("<span class=\"float-right\"><time-ago datetime=\"%s\">%s</time-ago></span>\n", date("Y-m-dTH:i:s", $b_temp[2]), date("Y-m-dTH:i:s", $b_temp[2]));
+                        printf("</td>\n");
+
+                        printf("</tr>\n");
+                    }
+                    pclose($handle);
+                ?>
+                </tbody>
+            </table>
+        </div>
+        <div style="font-family:calibri; color:#585858; font-weight:bold; font-size:10pt; text-align:right;"><span style="color:#b404ae">* vhds is not included</span></div>
+    </div>
+    <div class="col-md-6">
+        <h3><img src="image/azure-container.png"> Top 10 : Large Object</h3>
+        <div class="file-wrap">
+            <table class="files js-navigation-container js-active-navigation-container" data-pjax>
+                <tbody>
+                <?php
+                    $handle = popen("cat ".BHOM."/data/".$s_name."_all | awk -F'::' '{print $2 \"|\" $3 \"|\" $4 \"|\" $5}' | sort -t '|' -n -r -k4 | grep -v '^vhds' | head -n 10", "r");
+                    while (($buffer = fgets($handle, 1024)) !== false) {
+                        $b_temp = explode("|", $buffer);
+                        printf("<tr class=\"js-navigation-item\">\n");
+
+                        printf("<td class=\"icon\">\n");
+                        printf("<svg aria-hidden=\"true\" class=\"octicon octicon-file-text\" height=\"16\" version=\"1.1\" viewBox=\"0 0 12 16\" width=\"12\"><path d=\"M6 5H2V4h4v1zM2 8h7V7H2v1zm0 2h7V9H2v1zm0 2h7v-1H2v1zm10-7.5V14c0 .55-.45 1-1 1H1c-.55 0-1-.45-1-1V2c0-.55.45-1 1-1h7.5L12 4.5zM11 5L8 2H1v12h10V5z\"></path></svg>\n");
+                        printf("<img alt=\"\" class=\"spinner\" height=\"16\" src=\"https://assets-cdn.github.com/images/spinners/octocat-spinner-32.gif\" width=\"16\">\n");
+                        printf("</td>\n");
+
+                        printf("<td class=\"content\">\n");
+                        printf("<span class=\"css-truncate css-truncate-target\">%s/%s</span>\n", $b_temp[0], $b_temp[1]);
+                        printf("</td>\n");
+
+                        printf("<td class=\"message\">\n");
+                        printf("<span class=\"float-right\">%s</span>\n", sizeFormatter($b_temp[3]));
+                        printf("</td>\n");
+
+                        printf("</tr>\n");
+                    }
+                    pclose($handle);
+                ?>
+                </tbody>
+            </table>
+        </div>
+        <div style="font-family:calibri; color:#585858; font-weight:bold; font-size:10pt; text-align:right;"><span style="color:#b404ae">* vhds is not included</span></div>
+    </div>
+</div>
+
+<?
+    require("include/footer.html");
+?>
