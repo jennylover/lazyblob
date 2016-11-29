@@ -2,9 +2,9 @@
     require("lib/common.lib.html");
     require("include/header.html");
 
-    use WindowsAzure\Common\ServicesBuilder;
-    use WindowsAzure\Common\ServiceException;
-    use WindowsAzure\Blob\Models\ListBlobsOptions;
+    use MicrosoftAzure\Storage\Common\ServicesBuilder;
+    use MicrosoftAzure\Storage\Common\ServiceException;
+    use MicrosoftAzure\Storage\Blob\Models\ListBlobsOptions;
 
     $s_name = filter_input(INPUT_GET, 's_name', FILTER_SANITIZE_SPECIAL_CHARS);
     if(empty($s_name)) {
