@@ -1,3 +1,5 @@
+# popori
+
 # lazyblob
 lazyblob is a very simple code which aims make you lazy for azure blob storage. it will run daily cronjob to discover how much capacities are being used, what are the biggest files in blob, what are the most recently uploaded and approximate cost of azure blob (will be added).
 
